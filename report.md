@@ -21,7 +21,7 @@ The handwritten implementations are [matmul_named.mlir](part1/task2/matmul_named
 
 #### Comparison of the converted and handwritten versions
 
-I used the upstream `linalg-generalize-named-ops` pass (`--linalg-generalize-named-ops`) to convert `linalg.matmul` to `linalg.generic`. The command is in [run.sh, lines 15–16](part1/task2/run.sh#L15-L16).
+I used the upstream `linalg-generalize-named-ops` pass to convert `linalg.matmul` to `linalg.generic`. The command is in [run.sh, lines 15–16](part1/task2/run.sh#L15-L16).
 
 The converted `@matmul_named` and handwritten `@matmul_generic` have the same indexing maps, iterator types, and multiply-add body. Both compute `C += A * B`.
 
@@ -81,9 +81,9 @@ The comments identify the i, j, and k loops, the loads from A, B, and C, and the
 
 #### Q4.
 
-I used `--convert-linalg-to-loops` to generate `scf.for` loops and `--convert-linalg-to-affine-loops` to generate `affine.for` loops.
+- **Which passes did you use?** I used `--convert-linalg-to-loops` to generate `scf.for` loops and `--convert-linalg-to-affine-loops` to generate `affine.for` loops.
 
-I searched `mlir-opt --help` with `grep "loops"` and checked their descriptions in the official documentation to select these passes: [convert-linalg-to-loops](https://mlir.llvm.org/docs/Passes/#-convert-linalg-to-loops) and [convert-linalg-to-affine-loops](https://mlir.llvm.org/docs/Passes/#-convert-linalg-to-affine-loops).
+- **how did you find them?** I searched `mlir-opt --help` with `grep "loops"` and checked their descriptions in the official documentation to select these passes: [convert-linalg-to-loops](https://mlir.llvm.org/docs/Passes/#-convert-linalg-to-loops) and [convert-linalg-to-affine-loops](https://mlir.llvm.org/docs/Passes/#-convert-linalg-to-affine-loops).
 
 ### Task 4: Loop interchange
 
@@ -144,3 +144,65 @@ In the chosen order `i → k → j` (`j` innermost), every innermost access is e
 - **Does your interchange preserve the accumulation order for each element of C?**
 
   Yes. For any fixed `i` and `j`, the products `A[i, k] * B[k, j]` are still added to the initial value of `C[i, j]` in increasing order of `k`, from `0` to `K - 1`. Updates to different output elements are interleaved differently, but the sequence of partial sums for each element is unchanged. Therefore, this interchange does not regroup the floating-point additions.
+
+### Task 5: Lower to LLVM, link and run
+
+The compilation and execution commands are in [run.sh](part1/task5/run.sh). I used the [original SCF version](part1/task3/matmul_generic_scf.mlir) and the [interchanged SCF version](part1/task4/matmul_interchanged_scf.mlir) from task3 and task4. Running `run.sh` saves the generated LLVM dialect and LLVM IR files in `part1/task5/`. It also automatically creates `part1/task5/build/` for the renamed SCF inputs, object files, and the executable `matmul_run`.
+
+The script generates the following IR files:
+
+| Version      | LLVM dialect                                                               | LLVM IR                                                      |
+| ------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Original     | [matmul_original_llvm.mlir](part1/task5/matmul_original_llvm.mlir)         | [matmul_original.ll](part1/task5/matmul_original.ll)         |
+| Interchanged | [matmul_interchanged_llvm.mlir](part1/task5/matmul_interchanged_llvm.mlir) | [matmul_interchanged.ll](part1/task5/matmul_interchanged.ll) |
+
+Both versions are compiled to object files and linked with [matmul_driver.c](part1/task5/matmul_driver.c) to produce `part1/task5/build/matmul_run`.
+
+The driver uses `M = 512`, `K = 768`, and `N = 1024`, with random inputs in `[-1, 1]` generated using a fixed seed. Both output matrices and the reference matrix are initialized to `1.0` to check `C += A * B`. The C reference uses the original `i → j → k` order, and each MLIR result is compared with it using `memcmp` to check bit-identical results. The C driver is compiled with `-ffp-contract=off` to prevent FMA contraction in the calculation.
+
+Both versions passed the bit-identical comparison against the C reference.
+
+#### Q8.
+
+- **Full pipeline from `.mlir` to executable**
+
+  Both versions are lowered from Linalg to SCF using `--convert-linalg-to-loops`, as described in Tasks 3 and 4. The remaining commands are in [run.sh](part1/task5/run.sh).
+
+  ```text
+  Linalg mlir
+      ↓ --convert-linalg-to-loops
+  SCF mlir
+      ↓ apply the seven passes below
+  LLVM dialect mlir
+      ↓ mlir-translate --mlir-to-llvmir
+  LLVM IR ll
+      ↓ llc -O0 -filetype=obj -relocation-model=pic
+  Two object files + matmul_driver.c
+      ↓ clang compiles the driver and links both object files
+  matmul_run
+  ```
+
+- **What does each MLIR pass do, and what happens if one is omitted?**
+
+  The passes run in the following order. I tested each omission on the original kernel while keeping the rest of the pipeline unchanged ：
+
+  | Pass                         | Purpose                                                                                                                                                                                                                                                              | Effect if omitted                                                                                                                   |
+  | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+  | `convert-scf-to-cf`          | Replaces the three `scf.for` loops with basic blocks and `cf.br`/`cf.cond_br` operations, forming a control-flow graph. It also adds `arith.cmpi` operations to check the loop bounds and `arith.addi` operations to increment the loop variables.                   | SCF loops remain unlowered, and `mlir-translate` fails while parsing `scf.for`.                                                     |
+  | `convert-arith-to-llvm`      | Replaces Arith operations, including constants, comparisons, additions and multiplications, with LLVM dialect operations. It also inserts temporary conversion casts (`builtin.unrealized_conversion_cast`) to connect converted and unconverted operations.         | Arith operations remain unlowered, and `mlir-translate` fails while parsing `arith.constant`.                                       |
+  | `finalize-memref-to-llvm`    | Lowers MemRef operations using LLVM descriptor structs. It converts MemRef queries to LLVM operations and replaces `memref.load` and `memref.store` with address calculations based on descriptor information and indices, followed by `llvm.load` and `llvm.store`. | MemRef operations remain unlowered, and `mlir-translate` fails while parsing `memref.dim`.                                          |
+  | `convert-cf-to-llvm`         | Converts CF branches to LLVM dialect branches. It replaces `cf.br` and `cf.cond_br` with `llvm.br` and `llvm.cond_br`.                                                                                                                                               | CF branches remain unlowered, and `mlir-translate` fails while parsing `cf.br`.                                                     |
+  | `llvm-request-c-wrappers`    | Adds the `llvm.emit_c_interface` attribute to the function without changing its body. This requests a C-compatible wrapper, which is generated by the following function-conversion pass.                                                                            | LLVM IR translation and object generation succeed, but linking fails with an undefined reference to `_mlir_ciface_matmul_original`. |
+  | `convert-func-to-llvm`       | Converts functions from the Func dialect to the LLVM dialect. It uses `llvm.insertvalue` to reconstruct MemRef descriptors from the function arguments. It also generates the requested C wrapper `_mlir_ciface_matmul_original`.                                    | `func.func` remains unconverted, and `mlir-translate` fails because no LLVM translation interface is registered for this operation. |
+  | `reconcile-unrealized-casts` | Simplifies and removes redundant temporary conversion casts introduced during lowering.                                                                                                                                                                              | Temporary conversion casts remain, and `mlir-translate` fails to translate `builtin.unrealized_conversion_cast`.                    |
+
+- **Why must the passes run in this order?**
+
+  The order must follow dependencies, but these seven passes do not have only one possible ordering.
+
+  | Ordering dependency                                        | Reason                                                                                                                                |
+  | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+  | `convert-scf-to-cf` before `convert-cf-to-llvm`            | SCF lowering creates CF branches, which must then be converted to LLVM branches.                                                      |
+  | `convert-scf-to-cf` before `convert-arith-to-llvm`         | SCF lowering also creates arithmetic operations for loop-variable updates and loop-condition comparisons.                             |
+  | `llvm-request-c-wrappers` before `convert-func-to-llvm`    | Function conversion needs the wrapper attribute to generate the C wrapper.                                                            |
+  | Other LLVM conversions before `reconcile-unrealized-casts` | This pass cleans up redundant temporary conversion casts introduced by the other conversions, so it should run last in this pipeline. |
