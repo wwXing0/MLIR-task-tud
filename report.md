@@ -206,3 +206,23 @@ Both versions passed the bit-identical comparison against the C reference.
   | `convert-scf-to-cf` before `convert-arith-to-llvm`         | SCF lowering also creates arithmetic operations for loop-variable updates and loop-condition comparisons.                             |
   | `llvm-request-c-wrappers` before `convert-func-to-llvm`    | Function conversion needs the wrapper attribute to generate the C wrapper.                                                            |
   | Other LLVM conversions before `reconcile-unrealized-casts` | This pass cleans up redundant temporary conversion casts introduced by the other conversions, so it should run last in this pipeline. |
+
+## Part 2: A Stencil Dialect
+
+### Task 1:  Define the dialect
+
+I defined the Stencil dialect in [StencilDialect.td](include/Stencil/IR/StencilDialect.td) and its operations in [StencilOps.td](include/Stencil/IR/StencilOps.td). The operations are registered in [StencilDialect.cpp](lib/Stencil/IR/StencilDialect.cpp). The custom verifiers in [StencilOps.cpp](lib/Stencil/IR/StencilOps.cpp) check that offsets are non-empty and contain integer pairs.
+
+The two kernels are in [stencil_kernels.mlir](examples/stencil_kernels.mlir). The build and test commands are in [run.sh](part2/task1/run.sh). 
+
+I added tests in [test/Stencil](test/Stencil/) to check dialect registration, kernel parsing and printing, and the expected errors for invalid operations.
+
+### Task 2: Lower Jacobi-2D to Linalg
+
+I implemented the `stencil-apply-to-linalg` pass in [StencilApplyToLinalg.cpp](lib/Stencil/Transforms/StencilApplyToLinalg.cpp). It lowers `stencil.apply` to shifted `memref.subview` operations and a `linalg.generic` with identity indexing maps and two parallel iterators. The summation follows the offsets' order, and boundary values remain unchanged.
+
+The commands are in [run.sh](part2/task2/run.sh). The script saves the generated IR to [stencil_kernels_linalg.mlir](part2/task2/stencil_kernels_linalg.mlir). The tests are in [task2](test/Stencil/task2).
+
+#### Q9.
+
+We assume that A and B are separate, non-overlapping arrays. `stencil.apply` is out-of-place: each iteration reads neighbour values from the unchanged input A and writes a distinct element of B. Shared reads of input elements do not create dependencies. Therefore, iterations along both dimensions are independent, so both iterators can be marked `parallel`.

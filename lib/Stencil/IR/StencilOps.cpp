@@ -1,4 +1,4 @@
-//===- StencilOps.cpp - Stencil operations ---------------------------------===//
+//===- StencilOps.cpp - Stencil operations -------------------------------===//
 //
 // This file is licensed under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -25,8 +25,7 @@ static LogicalResult verifyOffsets(Operation *op, ArrayAttr offsets) {
 
   for (Attribute offset : offsets) {
     if (llvm::cast<ArrayAttr>(offset).size() != 2)
-      return op->emitOpError(
-          "each offset should contain exactly two integers");
+      return op->emitOpError("each offset should contain exactly two integers");
   }
   return success();
 }
@@ -34,13 +33,13 @@ static LogicalResult verifyOffsets(Operation *op, ArrayAttr offsets) {
 LogicalResult ApplyOp::verify() {
   if (failed(verifyOffsets(getOperation(), getOffsets())))
     return failure();
-  
+
   // Verify that the input and output operands are different
   Value input = getInput();
   Value output = getOutput();
   if (output == input)
-    return emitOpError(
-        "input and output operands should be different for an out-of-place pass");
+    return emitOpError("input and output operands should be different for an "
+                       "out-of-place pass");
 
   // Verify that the input and output shapes are compatible.
   const Type inputDataType = input.getType();

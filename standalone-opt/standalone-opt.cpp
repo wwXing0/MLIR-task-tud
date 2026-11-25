@@ -8,6 +8,8 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/MLIRContext.h"
@@ -25,9 +27,11 @@
 #include "Standalone/StandaloneDialect.h"
 #include "Standalone/StandaloneOpsDialect.cpp.inc"
 #include "Stencil/IR/StencilDialect.h"
+#include "Stencil/Transforms/StencilPasses.h"
 
 int main(int argc, char **argv) {
   mlir::registerAllPasses();
+  mlir::stencil::registerStencilPasses();
   // TODO: Register standalone passes here.
 
   mlir::DialectRegistry registry;
@@ -35,6 +39,8 @@ int main(int argc, char **argv) {
   registry.insert<mlir::stencil::StencilDialect>();
   registry.insert<mlir::func::FuncDialect>();
   registry.insert<mlir::arith::ArithDialect>();
+  registry.insert<mlir::linalg::LinalgDialect>();
+  registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::scf::SCFDialect>();
   // Add the following to include *all* MLIR Core dialects, or selectively
   // include what you need like above. You only need to register dialects that
