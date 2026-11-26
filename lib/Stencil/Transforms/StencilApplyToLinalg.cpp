@@ -182,7 +182,3 @@ struct StencilApplyToLinalgPass
 std::unique_ptr<Pass> mlir::stencil::createStencilApplyToLinalgPass() {
   return std::make_unique<StencilApplyToLinalgPass>();
 }
-
-void mlir::stencil::registerStencilPasses() {
-  PassRegistration<StencilApplyToLinalgPass>();
-}

@@ -226,3 +226,7 @@ The commands are in [run.sh](part2/task2/run.sh). The script saves the generated
 #### Q9.
 
 We assume that A and B are separate, non-overlapping arrays. `stencil.apply` is out-of-place: each iteration reads neighbour values from the unchanged input A and writes a distinct element of B. Shared reads of input elements do not create dependencies. Therefore, iterations along both dimensions are independent, so both iterators can be marked `parallel`.
+
+#### Q10.
+
+Parallel iterators require that iterations can execute in any order, including in parallel. However, `stencil.sweep` updates the same array in place. For two adjacent interior points, iteration `(i, j-1)` writes `A[i, j-1]`, and iteration `(i, j)` reads that updated value. This creates a **loop-carried RAW dependence**, the earlier write must occur before the later read. Therefore, these iterations are not independent. A loop lowering with `parallel` may violate this order, introduce data races, and cause an iteration to read an old value instead of the required updated value.

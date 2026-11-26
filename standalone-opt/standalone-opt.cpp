@@ -32,7 +32,6 @@
 int main(int argc, char **argv) {
   mlir::registerAllPasses();
   mlir::stencil::registerStencilPasses();
-  // TODO: Register standalone passes here.
 
   mlir::DialectRegistry registry;
   registry.insert<mlir::standalone::StandaloneDialect>();

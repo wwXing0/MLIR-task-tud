@@ -16,6 +16,8 @@
 namespace mlir::stencil {
 
 std::unique_ptr<Pass> createStencilApplyToLinalgPass();
+std::unique_ptr<Pass> createStencilSweepToScfPass();
+
 void registerStencilPasses();
 
 } // namespace mlir::stencil
