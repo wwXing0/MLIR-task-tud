@@ -209,11 +209,11 @@ Both versions passed the bit-identical comparison against the C reference.
 
 ## Part 2: A Stencil Dialect
 
-### Task 1:  Define the dialect
+### Task 1: Define the dialect
 
 I defined the Stencil dialect in [StencilDialect.td](include/Stencil/IR/StencilDialect.td) and its operations in [StencilOps.td](include/Stencil/IR/StencilOps.td). The operations are registered in [StencilDialect.cpp](lib/Stencil/IR/StencilDialect.cpp). The custom verifiers in [StencilOps.cpp](lib/Stencil/IR/StencilOps.cpp) check that offsets are non-empty and contain integer pairs.
 
-The two kernels are in [stencil_kernels.mlir](examples/stencil_kernels.mlir). The build and test commands are in [run.sh](part2/task1/run.sh). 
+The two kernels are in [stencil_kernels.mlir](examples/stencil_kernels.mlir). The build and test commands are in [run.sh](part2/task1/run.sh).
 
 I added tests in [test/Stencil](test/Stencil/) to check dialect registration, kernel parsing and printing, and the expected errors for invalid operations.
 
@@ -221,12 +221,75 @@ I added tests in [test/Stencil](test/Stencil/) to check dialect registration, ke
 
 I implemented the `stencil-apply-to-linalg` pass in [StencilApplyToLinalg.cpp](lib/Stencil/Transforms/StencilApplyToLinalg.cpp). It lowers `stencil.apply` to shifted `memref.subview` operations and a `linalg.generic` with identity indexing maps and two parallel iterators. The summation follows the offsets' order, and boundary values remain unchanged.
 
-The commands are in [run.sh](part2/task2/run.sh). The script saves the generated IR to [stencil_kernels_linalg.mlir](part2/task2/stencil_kernels_linalg.mlir). The tests are in [task2](test/Stencil/task2).
+The commands are in [run.sh](part2/task2/run.sh). The script saves the generated IR to [stencil_kernels_linalg.mlir](part2/task2/stencil_kernels_linalg.mlir). The tests are in [task2](test/Stencil/task2/lower-apply.mlir).
 
 #### Q9.
 
 We assume that A and B are separate, non-overlapping arrays. `stencil.apply` is out-of-place: each iteration reads neighbour values from the unchanged input A and writes a distinct element of B. Shared reads of input elements do not create dependencies. Therefore, iterations along both dimensions are independent, so both iterators can be marked `parallel`.
 
+### Task 3: Lower Seidel-2D to loops
+
+I implemented the `stencil-sweep-to-scf` pass in [StencilSweepToScf.cpp](lib/Stencil/Transforms/StencilSweepToScf.cpp). It lowers `stencil.sweep` to sequential `scf.for` loops. The summation follows the offsets' order, and boundary values remain unchanged.
+
+The commands are in [run.sh](part2/task3/run.sh). The script saves the generated IR to [stencil_kernels_scf.mlir](part2/task3/stencil_kernels_scf.mlir). The tests are in [task3](test/Stencil/task3/lower-sweep.mlir).
+
 #### Q10.
 
 Parallel iterators require that iterations can execute in any order, including in parallel. However, `stencil.sweep` updates the same array in place. For two adjacent interior points, iteration `(i, j-1)` writes `A[i, j-1]`, and iteration `(i, j)` reads that updated value. This creates a **loop-carried RAW dependence**, the earlier write must occur before the later read. Therefore, these iterations are not independent. A loop lowering with `parallel` may violate this order, introduce data races, and cause an iteration to read an old value instead of the required updated value.
+
+### Task 4: Compile and run
+
+The compilation and execution commands are in [run.sh](part2/task4/run.sh). The script lowers both kernels to the LLVM dialect, translates them to LLVM IR, and compiles them to an object file.
+
+The object file is linked separately with [jacobi_driver.c](part2/task4/jacobi_driver.c) and [seidel_driver.c](part2/task4/seidel_driver.c). Running the script generates the object file and the two executables, `jacobi_run` and `seidel_run`, in `part2/task4/build/`.
+
+The drivers compare the MLIR results with the corresponding C kernels in [polybench_reference.c](part2/task4/polybench_reference.c), extracted from PolyBench/C 4.2.1-beta.
+
+The C drivers and references are compiled with `-O0 -ffp-contract=off` to prevent FMA contraction in the reference calculations.
+
+Compared with Part 1 Task 5, this pipeline uses two additional passes:
+
+- `--expand-strided-metadata` makes the subview offset, size and stride calculations explicit.
+- `--lower-affine` lowers the `affine.apply` operations.
+
+#### Q11.
+
+Yes. With `N = 400` and `TSTEPS = 100`, both kernels produced bit-identical results to their PolyBench/C references.
+
+The lowerings preserve the summation order and the required traversal order. Under the current compilation settings, both paths perform the same arithmetic operations in the same order, so intermediate results are rounded in the same way. Therefore, the complete arrays match bit for bit.
+
+#### Q12.
+
+- **Can division by a constant be replaced by multiplication by its reciprocal without changing the result?**
+
+    Although division by a constant and multiplication by its reciprocal are mathematically equivalent, they do not always produce bit-identical floating-point results.
+
+    The combined rounding error from computing the reciprocal and then multiplying by it (`round(x * round(1 / c))`) may differ from the rounding error of direct division (`round(x / c)`). Therefore, the two calculations are not guaranteed to produce bit-identical results.
+
+    For example, using `double` with round-to-nearest and without fast-math optimizations:
+
+    ```text
+    5.0 / 3.0         = 1.6666666666666667
+    5.0 * (1.0 / 3.0) = 1.6666666666666665
+    ```
+
+- **Fast-math flags:** LLVM IR floating-point operations (`fneg`, `fadd`, `fsub`, `fmul`, `fdiv`, ...) may use fast-math flags to enable otherwise unsafe floating-point transformations. Individual flags specify particular assumptions or transformation permissions. For example, `nnan` allows the optimizer to assume that operands and results are not NaN,`contract` permits floating-point contraction, such as fusing multiplication and addition into FMA.
+
+  For the division-to-reciprocal transformation, the relevant flag is `arcp`. It allows division to be treated as a multiplication by a reciprocal. Specifically, this permits `a / b` to be considered equivalent to `a * (1.0 / b)`.
+
+  I traced the IR transformations for `5.0 / 3.0` using `-O3 -ffast-math`. The IR dumps show that `InstCombinePass` replaces the division with multiplication by a reciprocal, using the `arcp` flag.
+
+  Before `InstCombinePass`:
+
+  ```llvm
+  %division = fdiv fast double %x, 3.000000e+00
+  ```
+
+  After `InstCombinePass`:
+
+  ```llvm
+  %division = fmul fast double %x, 0x3FD5555555555555 ;The constant represents the rounded `double` value of `1.0 / 3.0`.
+  ```
+
+  This replacement can change rounding results, so bit-identical results to the original division may not guaranteed.
+
