@@ -1,5 +1,7 @@
+// Original version: source loop order i -> j -> k.
 module {
   llvm.func @matmul_original(%arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: i64, %arg3: i64, %arg4: i64, %arg5: i64, %arg6: i64, %arg7: !llvm.ptr, %arg8: !llvm.ptr, %arg9: i64, %arg10: i64, %arg11: i64, %arg12: i64, %arg13: i64, %arg14: !llvm.ptr, %arg15: !llvm.ptr, %arg16: i64, %arg17: i64, %arg18: i64, %arg19: i64, %arg20: i64) attributes {llvm.emit_c_interface} {
+    // Reconstruct the MemRef descriptor for C from function arguments.
     %0 = llvm.mlir.poison : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)>
     %1 = llvm.insertvalue %arg14, %0[0] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %2 = llvm.insertvalue %arg15, %1[1] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
@@ -8,6 +10,7 @@ module {
     %5 = llvm.insertvalue %arg19, %4[4, 0] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %6 = llvm.insertvalue %arg18, %5[3, 1] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %7 = llvm.insertvalue %arg20, %6[4, 1] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
+    // Reconstruct the MemRef descriptor for B from function arguments.
     %8 = llvm.mlir.poison : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)>
     %9 = llvm.insertvalue %arg7, %8[0] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %10 = llvm.insertvalue %arg8, %9[1] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
@@ -16,6 +19,7 @@ module {
     %13 = llvm.insertvalue %arg12, %12[4, 0] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %14 = llvm.insertvalue %arg11, %13[3, 1] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %15 = llvm.insertvalue %arg13, %14[4, 1] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
+    // Reconstruct the MemRef descriptor for A from function arguments.
     %16 = llvm.mlir.poison : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)>
     %17 = llvm.insertvalue %arg0, %16[0] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %18 = llvm.insertvalue %arg1, %17[1] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
@@ -27,6 +31,7 @@ module {
     %24 = llvm.mlir.constant(1 : index) : i64
     %25 = llvm.mlir.constant(0 : index) : i64
     %26 = llvm.mlir.constant(1 : index) : i64
+    // Read M,k,N for the loop bounds
     %27 = llvm.extractvalue %23[3] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %28 = llvm.alloca %26 x !llvm.array<2 x i64> : (i64) -> !llvm.ptr
     llvm.store %27, %28 : !llvm.array<2 x i64>, !llvm.ptr
@@ -45,16 +50,19 @@ module {
     %39 = llvm.getelementptr %38[0, %24] : (!llvm.ptr, i64) -> !llvm.ptr, !llvm.array<2 x i64>
     %40 = llvm.load %39 : !llvm.ptr -> i64
     llvm.br ^bb1(%25 : i64)
+  // i loop header
   ^bb1(%41: i64):  // 2 preds: ^bb0, ^bb8
     %42 = llvm.icmp "slt" %41, %30 : i64
     llvm.cond_br %42, ^bb2, ^bb9
   ^bb2:  // pred: ^bb1
     llvm.br ^bb3(%25 : i64)
+  // j loop header
   ^bb3(%43: i64):  // 2 preds: ^bb2, ^bb7
     %44 = llvm.icmp "slt" %43, %40 : i64
     llvm.cond_br %44, ^bb4, ^bb8
   ^bb4:  // pred: ^bb3
     llvm.br ^bb5(%25 : i64)
+  // k reduction loop header
   ^bb5(%45: i64):  // 2 preds: ^bb4, ^bb6
     %46 = llvm.icmp "slt" %45, %35 : i64
     llvm.cond_br %46, ^bb6, ^bb7
@@ -64,38 +72,48 @@ module {
     %49 = llvm.mul %41, %48 overflow<nsw> : i64
     %50 = llvm.add %49, %45 overflow<nsw> : i64
     %51 = llvm.getelementptr inbounds %47[%50] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+    // Load A[i, k].
     %52 = llvm.load %51 : !llvm.ptr -> f64
     %53 = llvm.extractvalue %15[1] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %54 = llvm.extractvalue %15[4, 0] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %55 = llvm.mul %45, %54 overflow<nsw> : i64
     %56 = llvm.add %55, %43 overflow<nsw> : i64
     %57 = llvm.getelementptr inbounds %53[%56] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+    // Load B[k, j].
     %58 = llvm.load %57 : !llvm.ptr -> f64
     %59 = llvm.extractvalue %7[1] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %60 = llvm.extractvalue %7[4, 0] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %61 = llvm.mul %41, %60 overflow<nsw> : i64
     %62 = llvm.add %61, %43 overflow<nsw> : i64
     %63 = llvm.getelementptr inbounds %59[%62] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+    // Load the current C[i, j].
     %64 = llvm.load %63 : !llvm.ptr -> f64
+    // Multiply A[i, k] by B[k, j].
     %65 = llvm.fmul %52, %58 : f64
+    // Accumulate: C[i, j] + product.
     %66 = llvm.fadd %64, %65 : f64
     %67 = llvm.extractvalue %7[1] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %68 = llvm.extractvalue %7[4, 0] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 
     %69 = llvm.mul %41, %68 overflow<nsw> : i64
     %70 = llvm.add %69, %43 overflow<nsw> : i64
     %71 = llvm.getelementptr inbounds %67[%70] : (!llvm.ptr, i64) -> !llvm.ptr, f64
+    // Store the updated result to C[i, j].
     llvm.store %66, %71 : f64, !llvm.ptr
+    // Increment k and return to the k-loop header.
     %72 = llvm.add %45, %24 : i64
     llvm.br ^bb5(%72 : i64)
   ^bb7:  // pred: ^bb5
+    // Increment j and return to the j-loop header.
     %73 = llvm.add %43, %24 : i64
     llvm.br ^bb3(%73 : i64)
   ^bb8:  // pred: ^bb3
+    // Increment i and return to the i-loop header.
     %74 = llvm.add %41, %24 : i64
     llvm.br ^bb1(%74 : i64)
   ^bb9:  // pred: ^bb1
     llvm.return
   }
+  // C-compatible wrapper
   llvm.func @_mlir_ciface_matmul_original(%arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr) attributes {llvm.emit_c_interface} {
     %0 = llvm.load %arg0 : !llvm.ptr -> !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)>
     %1 = llvm.extractvalue %0[0] : !llvm.struct<(ptr, ptr, i64, array<2 x i64>, array<2 x i64>)> 

@@ -53,7 +53,6 @@ int main(void)
         return 2;
     }
 
-    // Fixed seed for reproducible inputs in [-1, 1].
     srand(1);
     for (int64_t p = 0; p < M * K; ++p)
         A[p] = 2.0 * ((double)rand() / RAND_MAX) - 1.0;

@@ -4,32 +4,27 @@
 
 ### Task 1: Build LLVM/MLIR and the starter project
 
-The build steps are in [build_llvm.sh](part1/task1/build_llvm.sh) and [build_starter.sh](part1/task1/build_starter.sh):
+The build steps are in [build.sh](part1/task1/build.sh). The script builds and installs LLVM/MLIR, then builds and tests the starter project.
 
-```bash
-bash "$WORK_DIR/MLIR-task-tud/part1/task1/build_llvm.sh"
-bash "$WORK_DIR/MLIR-task-tud/part1/task1/build_starter.sh" "$WORK_DIR/llvm-install"
-```
+I used `llvmorg-23.1.3` and enabled MLIR with `LLVM_ENABLE_PROJECTS=mlir`. `LLVM_ENABLE_ASSERTIONS=ON` keeps internal checks enabled, and `LLVM_INSTALL_UTILS=ON` installs `FileCheck` for the starter tests.
 
-I used `llvmorg-23.1.3` and enabled MLIR with `LLVM_ENABLE_PROJECTS=mlir`. `LLVM_ENABLE_ASSERTIONS=ON` keeps internal checks enabled, and `LLVM_INSTALL_UTILS=ON` installs `FileCheck` for the starter tests. The source, build, and installation directories are `$WORK_DIR/llvm-project`, `$WORK_DIR/llvm-build`, and `$WORK_DIR/llvm-install`.
-
-The starter script sets `MLIR_DIR` and `LLVM_DIR` to this installation and builds the `check-standalone-opt` target to build the tool and run its tests.
+The script sets `MLIR_DIR` and `LLVM_DIR` to this installation and builds the `check-standalone-opt` target to build the tool and run its tests. Finally, it runs `standalone-opt --show-dialects` to display the registered dialects.
 
 ### Task 2: Express matrix multiplication in Linalg
 
-The handwritten implementations are [matmul_named.mlir](part1/task2/matmul_named.mlir) and [matmul_generic.mlir](part1/task2/matmul_generic.mlir). I verified both files with `mlir-opt` ([run.sh, lines 8–12](part1/task2/run.sh#L8-L12)).
+The handwritten implementations are [matmul_named.mlir](part1/task2/matmul_named.mlir) and [matmul_generic.mlir](part1/task2/matmul_generic.mlir). The commands are in [run.sh](part1/task2/run.sh), which verifies both files with `mlir-opt` and prints their IR. It also runs the verifier on [matmul_generic_changed.mlir](part1/task2/matmul_generic_changed.mlir) for Q3.
 
 #### Comparison of the converted and handwritten versions
 
-I used the upstream `linalg-generalize-named-ops` pass to convert `linalg.matmul` to `linalg.generic`. The command is in [run.sh, lines 15–16](part1/task2/run.sh#L15-L16).
+I used the upstream `linalg-generalize-named-ops` pass to convert `linalg.matmul` to `linalg.generic`. The script saves the generated IR to [matmul_named_generalized.mlir](part1/task2/matmul_named_generalized.mlir).
 
 The converted `@matmul_named` and handwritten `@matmul_generic` have the same indexing maps, iterator types, and multiply-add body. Both compute `C += A * B`.
 
-<img src="part1/task2/matmul_comparison.png" alt="Comparison of the converted and handwritten matrix multiplication IR" width="800">
+<img src="part1/task2/matmul_comparison.png" alt="Comparison of the converted and handwritten matrix multiplication IR" width="700">
 
 _Left: converted `@matmul_named`; right: handwritten `@matmul_generic`._
 
-The differences are in naming: `#map/#map1/#map2` instead of `#mapA/#mapB/#mapC`, `d0/d1/d2` instead of `i/j/k`, and different SSA names. The function stays named `@matmul_named` because the pass converts the operation without renaming the function. `return` is shorthand for `func.return`.
+The differences are in naming: `#map/#map1/#map2` instead of `#mapA/#mapB/#mapC`, `d0/d1/d2` instead of `i/j/k`, and different variable names. The function stays named `@matmul_named` because the pass converts the operation without renaming the function. `return` is shorthand for `func.return`.
 
 #### Q1.
 
@@ -70,14 +65,7 @@ The iterator types are `["parallel", "parallel", "reduction"]` for `d0`, `d1`, a
 
 ### Task 3: Lower to loops
 
-The lowering commands are in [part1/task3/run.sh](part1/task3/run.sh).
-
-| Version | Generated IR                                                         | IR with comments                                                           |
-| ------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| SCF     | [matmul_generic_scf.mlir](part1/task3/matmul_generic_scf.mlir)       | [SCF IR with comments](part1/task3/matmul_generic_scf_comments.mlir)       |
-| Affine  | [matmul_generic_affine.mlir](part1/task3/matmul_generic_affine.mlir) | [Affine IR with comments](part1/task3/matmul_generic_affine_comments.mlir) |
-
-The comments identify the i, j, and k loops, the loads from A, B, and C, and the store to C. These copies are saved separately so rerunning the script does not overwrite the comments.
+The lowering commands are in [part1/task3/run.sh](part1/task3/run.sh). The generated IR with comments is available in the [SCF version](part1/task3/matmul_generic_scf_comments.mlir) and the [Affine version](part1/task3/matmul_generic_affine_comments.mlir).
 
 #### Q4.
 
@@ -87,14 +75,9 @@ The comments identify the i, j, and k loops, the loads from A, B, and C, and the
 
 ### Task 4: Loop interchange
 
-The interchange is defined in [interchange.mlir](part1/task4/interchange.mlir). The commands for applying the interchange and lowering the result to loops are in [run.sh](part1/task4/run.sh).
+The commands for applying the interchange and lowering the result to loops are in [run.sh](part1/task4/run.sh).
 
-| Version | Generated IR                                                                   | IR with comments                                                                |
-| ------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| SCF     | [matmul_interchanged_scf.mlir](part1/task4/matmul_interchanged_scf.mlir)       | [SCF IR with comments](part1/task4/matmul_interchanged_scf_comments.mlir)       |
-| Affine  | [matmul_interchanged_affine.mlir](part1/task4/matmul_interchanged_affine.mlir) | [Affine IR with comments](part1/task4/matmul_interchanged_affine_comments.mlir) |
-
-The comments identify the i, j, and k loops to show the new loop order. The files with comments are saved separately so rerunning the script does not overwrite them.
+The interchanged IR with comments is available in the [SCF version](part1/task4/matmul_interchanged_scf_comments.mlir) and the [Affine version](part1/task4/matmul_interchanged_affine_comments.mlir).
 
 #### Q5.
 
@@ -149,18 +132,11 @@ In the chosen order `i → k → j` (`j` innermost), every innermost access is e
 
 The compilation and execution commands are in [run.sh](part1/task5/run.sh). I used the [original SCF version](part1/task3/matmul_generic_scf.mlir) and the [interchanged SCF version](part1/task4/matmul_interchanged_scf.mlir) from task3 and task4. Running `run.sh` saves the generated LLVM dialect and LLVM IR files in `part1/task5/`. It also automatically creates `part1/task5/build/` for the renamed SCF inputs, object files, and the executable `matmul_run`.
 
-The script generates the following IR files:
+The script generates the following IR files: the original version ([LLVM dialect](part1/task5/matmul_original_llvm.mlir), [LLVM IR](part1/task5/matmul_original.ll)) and the interchanged version ([LLVM dialect](part1/task5/matmul_interchanged_llvm.mlir), [LLVM IR](part1/task5/matmul_interchanged.ll)). All four IR files include comments. Both versions are compiled to object files and linked with [matmul_driver.c](part1/task5/matmul_driver.c) to produce `part1/task5/build/matmul_run`.
 
-| Version      | LLVM dialect                                                               | LLVM IR                                                      |
-| ------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Original     | [matmul_original_llvm.mlir](part1/task5/matmul_original_llvm.mlir)         | [matmul_original.ll](part1/task5/matmul_original.ll)         |
-| Interchanged | [matmul_interchanged_llvm.mlir](part1/task5/matmul_interchanged_llvm.mlir) | [matmul_interchanged.ll](part1/task5/matmul_interchanged.ll) |
+The driver uses `M = 512`, `K = 768`, and `N = 1024` to check `C += A * B`. The C reference uses the original `i → j → k` order, and each MLIR result is compared with it using `memcmp` to check bit-identical results. The C driver is compiled with `-O0 -ffp-contract=off` to prevent FMA contraction in the calculation.
 
-Both versions are compiled to object files and linked with [matmul_driver.c](part1/task5/matmul_driver.c) to produce `part1/task5/build/matmul_run`.
-
-The driver uses `M = 512`, `K = 768`, and `N = 1024`, with random inputs in `[-1, 1]` generated using a fixed seed. Both output matrices and the reference matrix are initialized to `1.0` to check `C += A * B`. The C reference uses the original `i → j → k` order, and each MLIR result is compared with it using `memcmp` to check bit-identical results. The C driver is compiled with `-ffp-contract=off` to prevent FMA contraction in the calculation.
-
-Both versions passed the bit-identical comparison against the C reference.
+Both versions passed the bit-identical comparison against the C reference. All four IR files include comments identifying the loops, loads from `A`, `B` and `C`, the multiply-add computation, and the store to `C`.
 
 #### Q8.
 
@@ -211,7 +187,7 @@ Both versions passed the bit-identical comparison against the C reference.
 
 ### Task 1: Define the dialect
 
-I defined the Stencil dialect in [StencilDialect.td](include/Stencil/IR/StencilDialect.td) and its operations in [StencilOps.td](include/Stencil/IR/StencilOps.td). The operations are registered in [StencilDialect.cpp](lib/Stencil/IR/StencilDialect.cpp). The custom verifiers in [StencilOps.cpp](lib/Stencil/IR/StencilOps.cpp) check that offsets are non-empty and contain integer pairs.
+I defined the Stencil dialect in [StencilDialect.td](include/Stencil/IR/StencilDialect.td) and its operations in [StencilOps.td](include/Stencil/IR/StencilOps.td). The operations are registered in [StencilDialect.cpp](lib/Stencil/IR/StencilDialect.cpp). The verifiers in [StencilOps.cpp](lib/Stencil/IR/StencilOps.cpp) check offsets, shape compatibility and distinct input/output operands.
 
 The two kernels are in [stencil_kernels.mlir](examples/stencil_kernels.mlir). The build and test commands are in [run.sh](part2/task1/run.sh).
 
@@ -235,7 +211,7 @@ The commands are in [run.sh](part2/task3/run.sh). The script saves the generated
 
 #### Q10.
 
-Parallel iterators require that iterations can execute in any order, including in parallel. However, `stencil.sweep` updates the same array in place. For two adjacent interior points, iteration `(i, j-1)` writes `A[i, j-1]`, and iteration `(i, j)` reads that updated value. This creates a **loop-carried RAW dependence**, the earlier write must occur before the later read. Therefore, these iterations are not independent. A loop lowering with `parallel` may violate this order, introduce data races, and cause an iteration to read an old value instead of the required updated value.
+Parallel iterators require that iterations can execute in any order, including in parallel. However, `stencil.sweep` updates the same array in place. For two adjacent interior points, iteration `(i, j-1)` writes `A[i, j-1]`, and iteration `(i, j)` reads that updated value. Similarly, iteration `(i-1, j)` writes `A[i-1, j]`, which is then read by iteration `(i, j)`. These accesses create **loop-carried RAW dependences** in both the `i` and `j` loops: the earlier writes must occur before the later reads. Therefore, these iterations are not independent. A lowering using `parallel` iterators may violate this order, introduce data races, and cause an iteration to read an old value instead of the required updated value.
 
 ### Task 4: Compile and run
 
@@ -262,20 +238,22 @@ The lowerings preserve the summation order and the required traversal order. Und
 
 - **Can division by a constant be replaced by multiplication by its reciprocal without changing the result?**
 
-    Although division by a constant and multiplication by its reciprocal are mathematically equivalent, they do not always produce bit-identical floating-point results.
+  Although division by a constant and multiplication by its reciprocal are mathematically equivalent, they do not always produce bit-identical floating-point results.
 
-    The combined rounding error from computing the reciprocal and then multiplying by it (`round(x * round(1 / c))`) may differ from the rounding error of direct division (`round(x / c)`). Therefore, the two calculations are not guaranteed to produce bit-identical results.
+  The combined rounding error from computing the reciprocal and then multiplying by it (`round(x * round(1 / c))`) may differ from the rounding error of direct division (`round(x / c)`). Therefore, the two calculations are not guaranteed to produce bit-identical results.
 
-    For example, using `double` with round-to-nearest and without fast-math optimizations:
+  For example, using `double` with round-to-nearest and without fast-math optimizations:
 
-    ```text
-    5.0 / 3.0         = 1.6666666666666667
-    5.0 * (1.0 / 3.0) = 1.6666666666666665
-    ```
+  ```text
+  5.0 / 3.0         = 1.6666666666666667
+  5.0 * (1.0 / 3.0) = 1.6666666666666665
+  ```
 
-- **Fast-math flags:** LLVM IR floating-point operations (`fneg`, `fadd`, `fsub`, `fmul`, `fdiv`, ...) may use fast-math flags to enable otherwise unsafe floating-point transformations. Individual flags specify particular assumptions or transformation permissions. For example, `nnan` allows the optimizer to assume that operands and results are not NaN,`contract` permits floating-point contraction, such as fusing multiplication and addition into FMA.
+  A sufficient condition is that the reciprocal is exactly representable. For finite `double` inputs, `x / 2.0` and `x * 0.5` give identical results under the same IEEE-754 rounding mode because `0.5` is exactly representable.
 
-  For the division-to-reciprocal transformation, the relevant flag is `arcp`. It allows division to be treated as a multiplication by a reciprocal. Specifically, this permits `a / b` to be considered equivalent to `a * (1.0 / b)`.
+- **Fast-math flags:** LLVM IR floating-point operations (`fneg`, `fadd`, `fsub`, `fmul`, `fdiv`, ...) may use fast-math flags to enable unsafe floating-point transformations. Individual flags specify particular assumptions or transformation permissions. For example, `nnan` allows the optimizer to assume that operands and results are not NaN, `contract` permits floating-point contraction, such as fusing multiplication and addition into FMA.
+
+  For the division-to-reciprocal transformation, the relevant flag is `arcp`. It allows division to be transformed as a multiplication by a reciprocal. Specifically, this permits `a / b` to be considered equivalent to `a * (1.0 / b)`.
 
   I traced the IR transformations for `5.0 / 3.0` using `-O3 -ffast-math`. The IR dumps show that `InstCombinePass` replaces the division with multiplication by a reciprocal, using the `arcp` flag.
 
@@ -291,5 +269,6 @@ The lowerings preserve the summation order and the required traversal order. Und
   %division = fmul fast double %x, 0x3FD5555555555555 ;The constant represents the rounded `double` value of `1.0 / 3.0`.
   ```
 
-  This replacement can change rounding results, so bit-identical results to the original division may not guaranteed.
+  This replacement can change rounding results, so bit-identical results to the original division may not be guaranteed.
 
+  In our current pipeline (`-O0`, without fast-math), the division by `9.0` in `stencil.sweep` is retained.

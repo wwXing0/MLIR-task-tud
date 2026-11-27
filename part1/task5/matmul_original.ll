@@ -1,7 +1,9 @@
+; Original version: source loop order i -> j -> k.
 ; ModuleID = 'LLVMDialectModule'
 source_filename = "LLVMDialectModule"
 
 define void @matmul_original(ptr %0, ptr %1, i64 %2, i64 %3, i64 %4, i64 %5, i64 %6, ptr %7, ptr %8, i64 %9, i64 %10, i64 %11, i64 %12, i64 %13, ptr %14, ptr %15, i64 %16, i64 %17, i64 %18, i64 %19, i64 %20) {
+  ; Reconstruct the MemRef descriptor for C from function arguments.
   %22 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } poison, ptr %14, 0
   %23 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %22, ptr %15, 1
   %24 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %23, i64 %16, 2
@@ -9,6 +11,7 @@ define void @matmul_original(ptr %0, ptr %1, i64 %2, i64 %3, i64 %4, i64 %5, i64
   %26 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %25, i64 %19, 4, 0
   %27 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %26, i64 %18, 3, 1
   %28 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %27, i64 %20, 4, 1
+  ; Reconstruct the MemRef descriptor for B from function arguments.
   %29 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } poison, ptr %7, 0
   %30 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %29, ptr %8, 1
   %31 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %30, i64 %9, 2
@@ -16,6 +19,7 @@ define void @matmul_original(ptr %0, ptr %1, i64 %2, i64 %3, i64 %4, i64 %5, i64
   %33 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %32, i64 %12, 4, 0
   %34 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %33, i64 %11, 3, 1
   %35 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %34, i64 %13, 4, 1
+  ; Reconstruct the MemRef descriptor for A from function arguments.
   %36 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } poison, ptr %0, 0
   %37 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %36, ptr %1, 1
   %38 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %37, i64 %2, 2
@@ -23,6 +27,7 @@ define void @matmul_original(ptr %0, ptr %1, i64 %2, i64 %3, i64 %4, i64 %5, i64
   %40 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %39, i64 %5, 4, 0
   %41 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %40, i64 %4, 3, 1
   %42 = insertvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %41, i64 %6, 4, 1
+  ;Read M,k,N for the loop bounds
   %43 = extractvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %42, 3
   %44 = alloca [2 x i64], i64 1, align 8
   store [2 x i64] %43, ptr %44, align 4
@@ -40,6 +45,7 @@ define void @matmul_original(ptr %0, ptr %1, i64 %2, i64 %3, i64 %4, i64 %5, i64
   %54 = load i64, ptr %53, align 4
   br label %55
 
+; i loop header
 55:                                               ; preds = %95, %21
   %56 = phi i64 [ %96, %95 ], [ 0, %21 ]
   %57 = icmp slt i64 %56, %46
@@ -48,6 +54,7 @@ define void @matmul_original(ptr %0, ptr %1, i64 %2, i64 %3, i64 %4, i64 %5, i64
 58:                                               ; preds = %55
   br label %59
 
+; j loop header
 59:                                               ; preds = %93, %58
   %60 = phi i64 [ %94, %93 ], [ 0, %58 ]
   %61 = icmp slt i64 %60, %54
@@ -56,6 +63,7 @@ define void @matmul_original(ptr %0, ptr %1, i64 %2, i64 %3, i64 %4, i64 %5, i64
 62:                                               ; preds = %59
   br label %63
 
+; k reduction loop header
 63:                                               ; preds = %66, %62
   %64 = phi i64 [ %92, %66 ], [ 0, %62 ]
   %65 = icmp slt i64 %64, %50
@@ -67,35 +75,44 @@ define void @matmul_original(ptr %0, ptr %1, i64 %2, i64 %3, i64 %4, i64 %5, i64
   %69 = mul nsw i64 %56, %68
   %70 = add nsw i64 %69, %64
   %71 = getelementptr inbounds double, ptr %67, i64 %70
+  ; Load A[i, k].
   %72 = load double, ptr %71, align 8
   %73 = extractvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %35, 1
   %74 = extractvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %35, 4, 0
   %75 = mul nsw i64 %64, %74
   %76 = add nsw i64 %75, %60
   %77 = getelementptr inbounds double, ptr %73, i64 %76
+  ; Load B[k, j].
   %78 = load double, ptr %77, align 8
   %79 = extractvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %28, 1
   %80 = extractvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %28, 4, 0
   %81 = mul nsw i64 %56, %80
   %82 = add nsw i64 %81, %60
   %83 = getelementptr inbounds double, ptr %79, i64 %82
+  ; Load the current C[i, j].
   %84 = load double, ptr %83, align 8
+  ; Multiply A[i, k] by B[k, j].
   %85 = fmul double %72, %78
+  ; Accumulate: C[i, j] + product.
   %86 = fadd double %84, %85
   %87 = extractvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %28, 1
   %88 = extractvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %28, 4, 0
   %89 = mul nsw i64 %56, %88
   %90 = add nsw i64 %89, %60
   %91 = getelementptr inbounds double, ptr %87, i64 %90
+  ; Store the updated result to C[i, j].
   store double %86, ptr %91, align 8
+  ; Increment k and return to the k-loop header.
   %92 = add i64 %64, 1
   br label %63
 
 93:                                               ; preds = %63
+  ; Increment j and return to the j-loop header.
   %94 = add i64 %60, 1
   br label %59
 
 95:                                               ; preds = %59
+  ; Increment i and return to the i-loop header.
   %96 = add i64 %56, 1
   br label %55
 
@@ -103,6 +120,7 @@ define void @matmul_original(ptr %0, ptr %1, i64 %2, i64 %3, i64 %4, i64 %5, i64
   ret void
 }
 
+; C-compatible wrapper
 define void @_mlir_ciface_matmul_original(ptr %0, ptr %1, ptr %2) {
   %4 = load { ptr, ptr, i64, [2 x i64], [2 x i64] }, ptr %0, align 8
   %5 = extractvalue { ptr, ptr, i64, [2 x i64], [2 x i64] } %4, 0

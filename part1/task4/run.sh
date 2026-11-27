@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LLVM_BIN="$HOME/mlir-task/llvm-install/bin"
+PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+WORK_DIR="$(dirname -- "$PROJECT_DIR")"
+LLVM_BIN="$WORK_DIR/llvm-install/bin"
+
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
 # Interchange the Linalg iterators from (i, j, k) to (i, k, j).

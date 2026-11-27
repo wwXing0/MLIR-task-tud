@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.."
-
-LLVM_INSTALL="$HOME/mlir-task/llvm-install"
+PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+WORK_DIR="$(dirname -- "$PROJECT_DIR")"
+LLVM_INSTALL="$WORK_DIR/llvm-install"
 LLVM_BIN="$LLVM_INSTALL/bin"
+
+cd -- "$PROJECT_DIR"
+
 cmake --fresh -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER=/usr/bin/clang \
   -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
   -DMLIR_DIR="$LLVM_INSTALL/lib/cmake/mlir" \
   -DLLVM_DIR="$LLVM_INSTALL/lib/cmake/llvm" \
-  -DLLVM_EXTERNAL_LIT="$HOME/mlir-task/llvm-build/bin/llvm-lit"
+  -DLLVM_EXTERNAL_LIT="$WORK_DIR/llvm-build/bin/llvm-lit"
 
 cmake --build build --target standalone-opt --parallel 2
 
-TASK_DIR="$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")"
+TASK_DIR="$PROJECT_DIR/part2/task4"
 mkdir -p "$TASK_DIR/build"
 
 # Lower stencil operations before passing the module to upstream mlir-opt.
