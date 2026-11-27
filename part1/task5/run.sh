@@ -25,7 +25,7 @@ sed 's/@matmul_generic(/@matmul_interchanged(/g' \
 	--llvm-request-c-wrappers \
 	--convert-func-to-llvm \
 	--reconcile-unrealized-casts \
-	-o matmul_original_llvm.mlir
+	-o build/matmul_original_llvm.mlir
 
 # Lower the interchanged SCF kernel to the LLVM dialect.
 "$LLVM_BIN/mlir-opt" build/matmul_interchanged_scf.mlir \
@@ -36,20 +36,20 @@ sed 's/@matmul_generic(/@matmul_interchanged(/g' \
 	--llvm-request-c-wrappers \
 	--convert-func-to-llvm \
 	--reconcile-unrealized-casts \
-	-o matmul_interchanged_llvm.mlir
+	-o build/matmul_interchanged_llvm.mlir
 
 # Translate the LLVM dialect to LLVM IR.
-"$LLVM_BIN/mlir-translate" --mlir-to-llvmir matmul_original_llvm.mlir \
-	-o matmul_original.ll
+"$LLVM_BIN/mlir-translate" --mlir-to-llvmir build/matmul_original_llvm.mlir \
+	-o build/matmul_original.ll
 
-"$LLVM_BIN/mlir-translate" --mlir-to-llvmir matmul_interchanged_llvm.mlir \
-	-o matmul_interchanged.ll
+"$LLVM_BIN/mlir-translate" --mlir-to-llvmir build/matmul_interchanged_llvm.mlir \
+	-o build/matmul_interchanged.ll
 
 # Compile the LLVM IR to object files.
-"$LLVM_BIN/llc" -O0 -filetype=obj -relocation-model=pic matmul_original.ll \
+"$LLVM_BIN/llc" -O0 -filetype=obj -relocation-model=pic build/matmul_original.ll \
 	-o build/matmul_original.o
 
-"$LLVM_BIN/llc" -O0 -filetype=obj -relocation-model=pic matmul_interchanged.ll \
+"$LLVM_BIN/llc" -O0 -filetype=obj -relocation-model=pic build/matmul_interchanged.ll \
 	-o build/matmul_interchanged.o
 
 # Link both kernels with one C driver

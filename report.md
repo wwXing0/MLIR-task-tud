@@ -130,7 +130,7 @@ In the chosen order `i → k → j` (`j` innermost), every innermost access is e
 
 ### Task 5: Lower to LLVM, link and run
 
-The compilation and execution commands are in [run.sh](part1/task5/run.sh). I used the [original SCF version](part1/task3/matmul_generic_scf.mlir) and the [interchanged SCF version](part1/task4/matmul_interchanged_scf.mlir) from task3 and task4. Running `run.sh` saves the generated LLVM dialect and LLVM IR files in `part1/task5/`. It also automatically creates `part1/task5/build/` for the renamed SCF inputs, object files, and the executable `matmul_run`.
+The compilation and execution commands are in [run.sh](part1/task5/run.sh). I used the [original SCF version](part1/task3/matmul_generic_scf.mlir) and the [interchanged SCF version](part1/task4/matmul_interchanged_scf.mlir) from task3 and task4. Running `run.sh` creates `part1/task5/build/` and saves the generated LLVM dialect and LLVM IR files, object files, and the executable `matmul_run` there.
 
 The script generates the following IR files: the original version ([LLVM dialect](part1/task5/matmul_original_llvm.mlir), [LLVM IR](part1/task5/matmul_original.ll)) and the interchanged version ([LLVM dialect](part1/task5/matmul_interchanged_llvm.mlir), [LLVM IR](part1/task5/matmul_interchanged.ll)). All four IR files include comments. Both versions are compiled to object files and linked with [matmul_driver.c](part1/task5/matmul_driver.c) to produce `part1/task5/build/matmul_run`.
 
